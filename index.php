@@ -10,52 +10,50 @@
 </head>
 <body>
     <div class="container">
-        <div class="row mt-3">
-            <div class="col-4 offset-4">
-                <?php
-                require __DIR__ . '/auxiliar.php';
-
-                const PAR = ['num_dep' => ''];
-
-                $errores = [];
-                $pdo = new PDO('pgsql:host=localhost;dbname=datos', 'usuario', 'usuario');
-                
-                try {
-                    $args = comprobarParametros(PAR, $errores);    
-                    comprobarErrores($errores);
-                    comprobarValores($args, $errores);
-                } catch (Exception $e) {
-                    // No se hace nada
-                }
-                dibujarFormulario($args, $errores);
-                ?>
-            </div>
-        </div>
         <?php
-        // $sent = $pdo->query('SELECT * FROM departamentos');
-        $sent = $pdo->prepare('SELECT *
-                                 FROM departamentos
-                                WHERE num_dep = :num_dep');
-        $sent->execute(['num_dep' => $args['num_dep']]);
+        require __DIR__ . '/auxiliar.php';
+        const TIPO_ENTERO = 0;
+        const TIPO_CADENA = 1;
+        const PAR = [
+            'num_dep' => [
+                'def' => '',
+                'tipo' => TIPO_ENTERO,
+                'etiqueta' => 'Número',
+            ],
+            'dnombre' => [
+                'def' => '',
+                'tipo' => TIPO_CADENA,
+                'etiqueta' => 'Nombre',
+            ],
+            'localidad' => [
+                'etiqueta' => 'Localidad',
+            ],
+        ];
+        
+        $pdo = new PDO('pgsql:host=localhost;dbname=datos', 'usuario', 'usuario');                
+        if (isset($_POST['id'], $_POST['op'])) {
+            $id = trim($_POST['id']);
+            if ($_POST['op'] == 'borrar') {
+                borrarFila($pdo, $id);
+            }
+        }
+        $errores = [];
+        $args = comprobarParametros(PAR, $errores);
+        comprobarValores($args, $errores);
+        dibujarFormularioIndex($args, PAR, $errores);
+        $sql = 'FROM departamentos WHERE true';
+        $execute = [];
+        foreach (PAR as $k => $v) {
+            insertarFiltro($sql, $execute, $k, $args, PAR, $errores);    
+        }
+        [$sent, $count] = ejecutarConsulta($sql, $execute, $pdo);
+        dibujarTabla($sent, $count, PAR, $errores);
         ?>
-        <div class="row mt-4">
-            <div class="col-8 offset-2">
-                <table class="table">
-                    <thead>
-                        <th scope="col">Número</th>
-                        <th scope="col">Nombre</th>
-                        <th scope="col">Localidad</th>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($sent as $fila): ?>
-                            <tr scope="row">
-                                <td><?= $fila['num_dep'] ?></td>
-                                <td><?= $fila['dnombre'] ?></td>
-                                <td><?= $fila['localidad'] ?></td>
-                            </tr>
-                        <?php endforeach ?>
-                    </tbody>
-                </table>
+        <div class="row">
+            <div class="col text-center">
+                <a href="insertar.php" class="btn btn-info" role="button">
+                    Insertar
+                </a>
             </div>
         </div>
     </div>
