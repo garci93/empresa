@@ -10,31 +10,22 @@
 <body>
     <div class="container">       
         <?php
+        require __DIR__ . '/../comunes/auxiliar.php';
         require __DIR__ . '/auxiliar.php';
     
-        const TIPO_ENTERO = 0;
-        const TIPO_CADENA = 1;
-    
-        const PAR = [
-            'num_dep' => [
-                'def' => '',
-                'tipo' => TIPO_ENTERO,
-                'etiqueta' => 'Número',
-            ],
-            'dnombre' => [
-                'def' => '',
-                'tipo' => TIPO_CADENA,
-                'etiqueta' => 'Nombre',
-            ],
-            'localidad' => [
-                'def' => '',
-                'tipo' => TIPO_CADENA,
-                'etiqueta' => 'Localidad',
-            ],
-        ];
         $errores = [];
-        $args = comprobarParametros(PAR, $errores);
-        dibujarFormularioInsertar($args, PAR, $errores);
+        $args = comprobarParametros(PAR, REQ_POST, $errores);
+        $pdo = conectar();
+        comprobarValores($args, null, $pdo, $errores);
+        if (es_POST() && empty($errores)) {
+            $sent = $pdo->prepare('INSERT
+                                     INTO departamentos (num_dep, dnombre, localidad)
+                                   VALUES (:num_dep, :dnombre, :localidad)');
+            $sent->execute($args);
+            setcookie('insertado', '1', 0, '/');
+            header('Location: index.php');
+        }
+        dibujarFormulario($args, PAR, 'Insertar', $pdo, $errores);
         ?>
         <!-- Optional JavaScript -->
         <!-- jQuery first, then Popper.js, then Bootstrap JS -->
