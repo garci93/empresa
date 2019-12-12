@@ -108,12 +108,3 @@ function departamentoVacio($pdo, $id)
     $sent->execute(['id' => $id]);
     return $sent->fetchColumn() === 0;
 }
-
-function aviso($par, $mensaje, $tipo)
-{
-    if (isset($_COOKIE[$par])) {
-        alert($mensaje, $tipo);
-        setcookie($par, '1', 1, '/');
-        unset($_COOKIE[$par]);
-    }
-}

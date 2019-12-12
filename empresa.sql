@@ -16,7 +16,8 @@ CREATE TABLE usuarios
      id       bigserial    PRIMARY KEY
    , login    varchar(255) NOT NULL UNIQUE
    , password varchar(255) NOT NULL
-   , email    varchar(255) NOT NULL
+   , email    varchar(255) CONSTRAINT email_no_vacia
+                           CHECK (email != '')
 );
 
 DROP TABLE IF EXISTS empleados CASCADE;

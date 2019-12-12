@@ -1,3 +1,4 @@
+<?php session_start() ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,10 +14,12 @@
         require __DIR__ . '/../comunes/auxiliar.php';
         require __DIR__ . '/auxiliar.php';
        
+        barra();
+        
         $errores = [];
         $args = comprobarParametros(PAR, REQ_POST, $errores);
         if (!isset($_GET['id'])) {
-            header('Location: index.php?modificar-error=1');
+            header('Location: index.php');
             return;
         }
         $id = trim($_GET['id']);
@@ -31,7 +34,8 @@
                                     WHERE id = :id');
             $args['id'] = $id;
             $sent->execute($args);
-            header('Location: index.php?modificado=1');
+            aviso('Fila modificada correctamente.');
+            header('Location: index.php');
             return;
         }
         if (es_GET()) {
@@ -40,7 +44,7 @@
                                     WHERE id = :id');
             $sent->execute(['id' => $id]);
             if (($args = $sent->fetch(PDO::FETCH_ASSOC)) === false) {
-                header('Location: index.php?modificar-error=1');
+                aviso('Ha habido un error al modificar la fila.', 'danger');
                 return;
             }
         }

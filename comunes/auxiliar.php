@@ -2,9 +2,12 @@
 
 const TIPO_ENTERO = 0;
 const TIPO_CADENA = 1;
+const TIPO_PASSWORD = 2;
 
 const REQ_GET = 'GET';
 const REQ_POST = 'POST';
+
+const FPP = 3;
 
 function comprobarParametros($par, $req, &$errores)
 {
@@ -75,12 +78,31 @@ function dibujarFormularioIndex($args, $par, $pdo, $errores)
     <?php
 }
 
+function token_csrf()
+{
+    if (isset($_SESSION['token'])) {
+        $token = $_SESSION['token'];
+        return <<<EOT
+            <input type="hidden" name="_csrf" value="$token">
+        EOT;
+    }
+}
+
+function tokenValido($_csrf)
+{
+    if ($_csrf !== null) {
+        return $_csrf === $_SESSION['token'];
+    }
+    return false;
+}
+
 function dibujarFormulario($args, $par, $accion, $pdo, $errores)
 { ?>
     <div class="row mt-3">
         <div class="col">
             <form action="" method="post">
                 <?php dibujarElementoFormulario($args, $par, $pdo, $errores) ?>
+                <?= token_csrf() ?>
                 <button type="submit" class="btn btn-primary">
                     <?= $accion ?>
                 </button>
@@ -109,18 +131,25 @@ function dibujarElementoFormulario($args, $par, $pdo, $errores)
                                            FROM $tabla");
                     ?>
                     <select id="<?= $k ?>" name="<?= $k ?>" class="form-control">
+                        <option value="" selected>
+                            Cualquier departamento
+                        </option>
                         <?php foreach ($sent as $fila): ?>
-                            <option value="<?= $fila[0] ?>"
-                                    <?= selected($fila[0], $args['departamento_id']) ?>>
-                                <?= $fila[1] ?>
+                            <option value="<?= h($fila[0]) ?>">
+                                <?= h($fila[1]) ?>
                             </option>
                         <?php endforeach ?>
                     </select>
+                <?php elseif ($par[$k]['tipo'] === TIPO_PASSWORD): ?>
+                    <input type="password"
+                           class="form-control <?= valido($k, $errores) ?>"
+                           id="<?= $k ?>" name="<?= $k ?>"
+                           value="">
                 <?php else: ?>
                     <input type="text"
                            class="form-control <?= valido($k, $errores) ?>"
                            id="<?= $k ?>" name="<?= $k ?>"
-                           value="<?= $args[$k] ?>">
+                           value="<?= h($args[$k]) ?>">
                 <?php endif ?>
                 <?= mensajeError($k, $errores) ?>
             </div>
@@ -143,16 +172,23 @@ function insertarFiltro(&$sql, &$execute, $campo, $args, $par, $errores)
 
 function ejecutarConsulta($sql, $execute, $pdo)
 {
+    $sent = $pdo->prepare("SELECT * $sql");
+    $sent->execute($execute);
+    return $sent;
+}
+
+function contarConsulta($sql, $execute, $pdo)
+{
     $sent = $pdo->prepare("SELECT COUNT(*) $sql");
     $sent->execute($execute);
     $count = $sent->fetchColumn();
-    $sent = $pdo->prepare("SELECT * $sql");
-    $sent->execute($execute);
-    return [$sent, $count];
+    return $count;
 }
 
-function dibujarTabla($sent, $count, $par, $errores)
-{ ?>
+function dibujarTabla($sent, $count, $par, $orden, $errores)
+{
+    $filtro = paramsFiltro();
+    ?>
     <?php if ($count == 0): ?>
         <?php alert('No se ha encontrado ninguna fila que coincida.', 'danger') ?>        <div class="row mt-3">
     <?php elseif (isset($errores[0])): ?>
@@ -163,7 +199,12 @@ function dibujarTabla($sent, $count, $par, $errores)
                 <table class="table">
                     <thead>
                         <?php foreach ($par as $k => $v): ?>
-                            <th scope="col"><?= $par[$k]['etiqueta'] ?></th>    
+                            <th scope="col">
+                                <a href="<?= "?$filtro&orden=$k" ?>">
+                                    <?= $par[$k]['etiqueta'] ?>
+                                </a>
+                                <?= ($k === $orden) ? '⬆' : '' ?>
+                            </th>
                         <?php endforeach ?>
                         <th scope="col">Acciones</th>
                     </thead>
@@ -173,15 +214,27 @@ function dibujarTabla($sent, $count, $par, $errores)
                                 <?php foreach ($par as $k => $v): ?>
                                     <?php if (isset($par[$k]['relacion'])): ?>
                                         <?php $visualizar = $par[$k]['relacion']['visualizar'] ?>
-                                        <td><?= $fila[$visualizar] ?></td>
+                                        <?php $ajena = $par[$k]['relacion']['ajena'] ?>
+                                        <td>
+                                            <a href="/departamentos/modificar.php?id=<?= $fila[$ajena] ?>">
+                                                <?= $fila[$visualizar] ?>
+                                            </a>
+                                        </td>
                                     <?php else: ?>
-                                        <td><?= $fila[$k] ?></td>
+                                        <td><?= h($fila[$k]) ?></td>
                                     <?php endif ?>
                                 <?php endforeach ?>
                                 <td>
                                     <form action="" method="post">
                                         <input type="hidden" name="id" value="<?= $fila['id'] ?>">
-                                        <button type="submit" class="btn btn-sm btn-danger">Borrar</button>
+                                        <?= token_csrf() ?>
+                                        <?php if (isset($fila['id'])): ?>
+                                            <a href="borrar.php?id=<?= $fila['id'] ?>" class="btn btn-sm btn-danger" role="button">
+                                                Borrar
+                                            </a>
+                                        <?php else: ?>
+                                            <button type="submit" class="btn btn-sm btn-danger">Borrar</button><p>A<P>
+                                        <?php endif ?>
                                         <a href="modificar.php?id=<?= $fila['id'] ?>" class="btn btn-sm btn-info" role="button">
                                             Modificar
                                         </a>
@@ -196,11 +249,23 @@ function dibujarTabla($sent, $count, $par, $errores)
     <?php endif;
 }
 
-function alert($mensaje, $tipo)
-{ ?>
+function alert($mensaje = null, $severidad = null)
+{
+    if ($mensaje === null) {
+        if (hayAvisos()) {
+            $aviso = getAviso();
+            $mensaje = $aviso['mensaje'];
+            $severidad = $aviso['severidad'];
+            quitarAvisos();
+        } else {
+            return;
+        }
+    }
+    
+    ?>
     <div class="row mt-3">
         <div class="col-8 offset-2">
-            <div class="alert alert-<?= $tipo ?> alert-dismissible fade show" role="alert">
+            <div class="alert alert-<?= $severidad ?> alert-dismissible fade show" role="alert">
                 <?= $mensaje ?>
                 <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
@@ -217,7 +282,7 @@ function borrarFila($pdo, $tabla, $id)
                             WHERE id = :id");
     $sent->execute(['id' => $id]);
     if ($sent->rowCount() === 1) {
-        setcookie('borrado', '1', 0, '/');
+        aviso('Fila borrada correctamente.');
         header('Location: index.php');
     } else {
         alert('Ha ocurrido un error inesperado.', 'danger');
@@ -250,6 +315,163 @@ function peticion($req = null)
 }
 
 function barra()
+{ ?>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav ml-auto justify-content-end">
+                <li class="nav-item active">
+                    <a class="nav-link" href="/index.php">Inicio <span class="sr-only">(current)</span></a>
+                </li>
+                <li class="nav-item active">
+                    <a class="nav-link" href="/empleados/">Empleados <span class="sr-only">(current)</span></a>
+                </li>
+                <li class="nav-item active">
+                    <a class="nav-link" href="/departamentos/">Departamentos <span class="sr-only">(current)</span></a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <?php if (logueado()): ?>
+                            <?= logueado() ?>
+                        <?php else: ?>
+                            Usuarios
+                        <?php endif; ?>
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="navbarDropdown">
+                        <?php if (!logueado()): ?>
+                            <a class="dropdown-item" href="/usuarios/registrar.php">Registrar</a>
+                            <a class="dropdown-item" href="/usuarios/login.php">Login</a>
+                            <?php else: ?>
+                            <!-- <div class="dropdown-divider"></div> -->
+                            <form class="form-inline my-2 my-lg-0" action="/usuarios/logout.php" method="post">
+                            <button class="btn btn-sm btn-success ml-4" type="submit">Logout</button>
+                        </form>
+                        <?php endif; ?>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </nav>
+    <?php
+}
+
+function logueado()
 {
-    //traer con commit   
+    return isset($_SESSION['login']) ? $_SESSION['login'] : false;
+}
+
+function aviso($mensaje, $severidad = 'success')
+{
+    $_SESSION['aviso'] = [
+        'mensaje' => $mensaje,
+        'severidad' => $severidad,
+    ];
+}
+
+function hayAvisos()
+{
+    return isset($_SESSION['aviso']);
+}
+
+function getAviso()
+{
+    return hayAvisos() ? $_SESSION['aviso'] : [];
+}
+
+function quitarAvisos()
+{
+    unset($_SESSION['aviso']);
+}
+
+function h($cadena)
+{
+    return htmlspecialchars($cadena, ENT_QUOTES | ENT_SUBSTITUTE);
+}
+
+function logueoObligatorio()
+{
+    if (!logueado()) {
+        aviso('Tiene que estar logueado para entrar en esa parte del programa.', 'danger');
+        $_SESSION['retorno'] = $_SERVER['REQUEST_URI'];
+        header('Location: /usuarios/login.php');
+        return true;
+    }
+    return false;
+}
+
+function noLogueoObligatorio()
+{
+    if (logueado()) {
+        aviso('Tiene que estar no logueado para entrar en esa parte del programa.', 'danger');
+        $_SESSION['retorno'] = $_SERVER['REQUEST_URI'];
+        header('Location: /');
+        return true;
+    }
+    return false;
+}
+
+function paginador($pag, $npags, $orden)
+{
+    $filtro = paramsFiltro();
+
+    $ant = $pag - 1;
+    $sig = $pag + 1; 
+    $orden = "orden=$orden";
+    ?>
+    <div class="row">
+        <div class="col-6 offset-3 mt-3">
+            <nav aria-label="Page navigation example">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item <?= ($pag <= 1) ? 'disabled' : '' ?>">
+                        <a class="page-link" href="<?= "?pag=$ant&$filtro&$orden" ?>">Anterior</a>
+                    </li>
+                    <?php for ($i = 1; $i <= $npags; $i++): ?>
+                        <li class="page-item <?= ($i == $pag) ? 'active' : '' ?>">
+                            <a class="page-link" href="<?= "?pag=$i&$filtro&$orden" ?>"><?= $i ?></a>
+                        </li>
+                    <?php endfor ?>
+                    <li class="page-item <?= ($pag >= $npags) ? 'disabled' : '' ?>">
+                        <a class="page-link" href="<?= "?pag=$sig&$filtro&$orden" ?>">Siguiente</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </div><?php
+}
+
+function recogerNumPag()
+{
+    if (isset($_GET['pag']) && ctype_digit($_GET['pag'])) {
+        $pag = trim($_GET['pag']);
+        unset($_GET['pag']);
+    } else {
+        $pag = 1;
+    }
+    
+    return $pag;
+}
+
+function recogerOrden()
+{
+    if (isset($_GET['orden'])) {
+        $orden = trim($_GET['orden']);
+        unset($_GET['orden']);
+    } else {
+        $orden = 'num_dep';
+    }
+    
+    return $orden;
+}
+
+function paramsFiltro()
+{
+    $filtro = [];
+
+    foreach ($_GET as $k => $v) {
+        $filtro[] = "$k=$v";
+    }
+
+    return implode('&', $filtro);
 }

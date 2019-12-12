@@ -1,3 +1,4 @@
+<?php session_start() ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,26 +15,25 @@
         require __DIR__ . '/../comunes/auxiliar.php';
         require __DIR__ . '/auxiliar.php';
 
+        if (logueoObligatorio()) {
+            return;
+        }
+
+        barra();
+        
         if (!isset($_COOKIE['aceptar'])) {
             alert('Este sitio usa cookies. <a href="/comunes/cookies.php">Estoy de acuerdo</a>', 'info');
         }
-
+        
+        $pag = recogerNumPag();
+        $orden = recogerOrden();
         $pdo = conectar();
-
+        
         if (es_POST()) {
-            if (isset($_POST['id'])) {
-                $id = trim($_POST['id']);
-                if (!departamentoVacio($pdo, $id)) {
-                    alert('El departamento tiene empleados.', 'danger');
-                } else {
-                    borrarFila($pdo, 'departamentos', $id);
-                }
-            }
-        } else {
-            aviso('borrado', 'Fila borrada con éxito.', 'success');
-            aviso('insertado', 'Fila insertada correctamente.', 'success');
-            aviso('modificado', 'Fila modificada correctamente.', 'success');
-            aviso('modificar-error', 'Error al modificar fila.', 'danger');
+            header("Location: /departamentos/borrar.php");
+            
+        } elseif (hayAvisos()) {
+            alert();
         }
 
         $errores = [];
@@ -45,8 +45,12 @@
         foreach (PAR as $k => $v) {
             insertarFiltro($sql, $execute, $k, $args, PAR, $errores);    
         }
-        [$sent, $count] = ejecutarConsulta($sql, $execute, $pdo);
-        dibujarTabla($sent, $count, PAR, $errores);
+        $nfilas = contarConsulta($sql, $execute, $pdo);
+        $sql .= " ORDER BY $orden LIMIT " . FPP
+              . ' OFFSET ' . ($pag - 1) * FPP;
+        $sent = ejecutarConsulta($sql, $execute, $pdo);
+        dibujarTabla($sent, $nfilas, PAR, $orden, $errores);
+        $npags = ceil($nfilas / FPP);
         ?>
         <div class="row">
             <div class="col text-center">
@@ -55,6 +59,7 @@
                 </a>
             </div>
         </div>
+        <?php paginador($pag, $npags, $orden) ?>
     </div>
     <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->

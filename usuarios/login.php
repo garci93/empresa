@@ -7,13 +7,26 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
-    <title>Empleados</title>
+    <title>Login</title>
 </head>
 <body>
     <div class="container">
         <?php
         require __DIR__ . '/../comunes/auxiliar.php';
         require __DIR__ . '/auxiliar.php';
+        
+        const PAR = [
+            'login' => [
+                'def' => '',
+                'tipo' => TIPO_CADENA,
+                'etiqueta' => 'Usuario',
+            ],
+            'password' => [
+                'def' => '',
+                'tipo' => TIPO_PASSWORD,
+                'etiqueta' => 'Contraseña',
+            ],
+        ];
 
         barra();
 
@@ -21,48 +34,29 @@
             alert('Este sitio usa cookies. <a href="/comunes/cookies.php">Estoy de acuerdo</a>', 'info');
         }
 
-        $pag = recogerNumPag();
-        $orden = recogerOrden();
-        $pdo = conectar();
-
-        if (es_POST()) {
-            if (isset($_POST['id'])) {
-                $id = trim($_POST['id']);
-                borrarFila($pdo, 'empleados', $id);
-            }
-        } elseif (hayAvisos()) {
+        if (hayAvisos()) {
             alert();
         }
 
         $errores = [];
-        $args = comprobarParametros(PAR, REQ_GET, $errores);
-        comprobarValoresIndex($args, $errores);
-        dibujarFormularioIndex($args, PAR, $pdo, $errores);
-        $sql = ' FROM empleados e
-                 JOIN (SELECT id AS d_id, num_dep, dnombre, localidad
-                         FROM departamentos) d
-                   ON e.departamento_id = d.d_id
-                WHERE true';
-        $execute = [];
-        foreach (PAR as $k => $v) {
-            insertarFiltro($sql, $execute, $k, $args, PAR, $errores);    
+        $args = comprobarParametros(PAR, REQ_POST, $errores);
+        $pdo = conectar();
+        comprobarValoresLogin($args, $pdo, $errores);
+        if (es_POST() && empty($errores)) {
+            // Usuario se loguea
+            $_SESSION['login'] = $args['login'];
+            $_SESSION['token'] = md5(uniqid(mt_rand(), true));
+            if (isset($_SESSION['retorno'])) {
+                $retorno = $_SESSION['retorno'];
+                unset($_SESSION['retorno']);
+                header("Location: $retorno");
+                return;
+            }
+            header('Location: /index.php');
+            return;
         }
-        $nfilas = contarConsulta($sql, $execute, $pdo);
-        $sql .= ' ORDER BY num_dep LIMIT ' . FPP
-              . ' OFFSET ' . ($pag - 1) * FPP;
-        $sent = ejecutarConsulta($sql, $execute, $pdo);
-        dibujarTabla($sent, $nfilas, PAR, $orden, $errores);
-        $npags = ceil($nfilas / FPP);
+        dibujarFormulario($args, PAR, 'Login', $pdo, $errores);
         ?>
-        <div class="row">
-            <div class="col text-center">
-                <a href="/empleados/insertar.php" class="btn btn-info" role="button">
-                    Insertar
-                </a>
-            </div>
-        </div>
-        <?php paginador($pag, $npags, $orden) ?>
-    </div>
     <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>

@@ -1,3 +1,4 @@
+<?php session_start() ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,6 +14,8 @@
         require __DIR__ . '/../comunes/auxiliar.php';
         require __DIR__ . '/auxiliar.php';
     
+        barra();
+
         $errores = [];
         $args = comprobarParametros(PAR, REQ_POST, $errores);
         $pdo = conectar();
@@ -22,7 +25,8 @@
                                      INTO empleados (num_emp, nombre, salario, departamento_id)
                                    VALUES (:num_emp, :nombre, :salario, :departamento_id)');
             $sent->execute($args);
-            header('Location: index.php?insertado=1');
+            aviso('La fila se ha insertado correctamente.');
+            header('Location: index.php');
         }
         dibujarFormulario($args, PAR, 'Insertar', $pdo, $errores);
         ?>

@@ -1,3 +1,4 @@
+<?php session_start() ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,16 +15,22 @@
         require __DIR__ . '/auxiliar.php';
     
         $errores = [];
+        $_csrf = (isset($_POST['_csrf'])) ? $_POST['_csrf'] : null;
+        unset($_POST['_csrf']);
         $args = comprobarParametros(PAR, REQ_POST, $errores);
         $pdo = conectar();
         comprobarValores($args, null, $pdo, $errores);
         if (es_POST() && empty($errores)) {
-            $sent = $pdo->prepare('INSERT
-                                     INTO departamentos (num_dep, dnombre, localidad)
-                                   VALUES (:num_dep, :dnombre, :localidad)');
-            $sent->execute($args);
-            setcookie('insertado', '1', 0, '/');
-            header('Location: index.php');
+            if (!tokenValido($_csrf)) {
+                alert('El token de CSRF no es válido.', 'danger');
+            } else {
+                $sent = $pdo->prepare('INSERT
+                                         INTO departamentos (num_dep, dnombre, localidad)
+                                       VALUES (:num_dep, :dnombre, :localidad)');
+                $sent->execute($args);
+                aviso('Fila insertada correctamente.');
+                header('Location: index.php');
+            }
         }
         dibujarFormulario($args, PAR, 'Insertar', $pdo, $errores);
         ?>
